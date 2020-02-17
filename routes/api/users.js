@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const gravatar = require('gravatar');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const config = require('config');
 const { check, validationResult } = require('express-validator/check');
 
 const User = require('../../models/User');
@@ -9,7 +11,7 @@ const User = require('../../models/User');
 // @route    POST api/users
 // @desc     Register user
 // @access   Public (whether or not you need a token to access this route)
-router.post('/', [
+router.post('/', [ // Validation Middleware
     check('name', 'Name is required')
         .not()
         .isEmpty(),
@@ -23,6 +25,11 @@ router.post('/', [
 
     const { name, email, password } = req.body; //Destructuring
 
+    // Before registering user:
+        // 1. See if they exist
+        // 2. Get user's gravatar
+        // 3. Encrpyt their password
+        // 4. Return jsonwebtoken for authentication
     try {
         // See if the user exists
         let user = await User.findOne({ email });
@@ -44,7 +51,7 @@ router.post('/', [
             password
         });
 
-        // Encrpyt password
+        // Encrypt password
         const salt = await bcrypt.genSalt(10); // Generate salt
 
         user.password = await bcrypt.hash(password, salt); // Hash password
@@ -52,7 +59,21 @@ router.post('/', [
         await user.save(); // Add user 
 
         // Return jsonwebtoken
-        res.send('User registered');
+        const payload = {
+            user: {
+                id: user.id
+            }
+        }
+
+        jwt.sign(
+            payload, // Pass in payload
+            config.get('jwtSecret'), // Pass in secret
+            { expiresIn: 360000 }, // 3600 is 1 hour. Chane this to 3600 later
+            (err, token) => {
+                if(err) throw err;
+                res.json({ token });
+            }
+        );
     } 
     catch(err) {
         console.error(err.message);
